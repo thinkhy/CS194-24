@@ -65,6 +65,7 @@ do
     shift
 done
 
+echo "exec qemu ..."
 exec ./qemu/build/x86_64-softmmu/qemu-system-x86_64 \
-    --kernel linux/arch/x86/boot/bzImage \
+    -no-acpi --kernel linux/arch/x86/boot/bzImage \
     $initrd $append $serial $monitor $debug $kvm $memory $net $smp

@@ -1,8 +1,8 @@
 VERSION = 3
 PATCHLEVEL = 7
 SUBLEVEL = 1
-EXTRAVERSION =
-NAME = Terrified Chipmunk
+EXTRAVERSION = cs194_thinkhy
+NAME = One Giant Leap for Frogkind
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"

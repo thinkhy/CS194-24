@@ -804,7 +804,8 @@ static void __init kernel_init_freeable(void);
 
 static int __ref kernel_init(void *unused)
 {
-	kernel_init_freeable();
+        short retv;                    /* modified by thinkhy 09/05/15 */
+	kernel_init_freeable();             
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
 	free_initmem();
@@ -816,10 +817,15 @@ static int __ref kernel_init(void *unused)
 	flush_delayed_fput();
 
 	if (ramdisk_execute_command) {
-		if (!run_init_process(ramdisk_execute_command))
+		retv = run_init_process(ramdisk_execute_command);
+		if (retv == 0)             /* modified by thinkhy 09/05/15 */
 			return 0;
-		printk(KERN_WARNING "Failed to execute %s\n",
-				ramdisk_execute_command);
+		/* added by thinkhy */
+		else if (retv == -ENOENT)
+		        panic("/init unable to load library or interpreter");
+                
+		printk(KERN_WARNING "Failed to execute %s, retv = %d\n",
+				ramdisk_execute_command, retv);
 	}
 
 	/*

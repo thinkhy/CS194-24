@@ -219,13 +219,13 @@ Given /^Linux is booted with "(.*?)"$/ do |boot_args|
   boot_linux(boot_args)
 end
 
-Then /^the extra version should be "(.*?)"$/ do |extra_version|
+Then /^the extra version should be\s*"(.*?)"$/ do |extra_version|
   # We just need to read the output, this special init already prints
   # out the version information
   line = next_line_noprintk()
 
   # We can finally test the actual version here.
-  if !(/Linux \(none\) [0-9]*\.[0-9]*\.[0-9]*#{extra_version}/.match(line))
+  if !(/Linux \(version\) [0-9]*\.[0-9]*\.[0-9]*#{extra_version}/.match(line))
     fail
   end
 end

@@ -1488,7 +1488,6 @@ static int do_execve_common(const char *filename,
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out_unmark;
-
 	sched_exec();
 
 	bprm->file = file;

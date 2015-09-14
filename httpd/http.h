@@ -26,10 +26,15 @@ struct http_server
 {
     struct http_session * (*wait_for_client)(struct http_server *);
 
+
     int fd;
+    int efd;  /* Descriptor for epoll_wait, added by thinkhy, 151001 */
 };
 
 /* Creates a new HTTP server listening on the given port. */
 struct http_server *http_server_new(palloc_env env, short port);
+
+/* Added by thinkhy, 151001 */
+struct http_server *create_http_server(palloc_env env, short port); 
 
 #endif

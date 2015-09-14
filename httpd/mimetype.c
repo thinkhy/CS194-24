@@ -26,6 +26,7 @@ struct mimetype *mimetype_new(palloc_env env, const char *path)
     fullpath = palloc_array(env, char, fullpath_len);
     snprintf(fullpath, fullpath_len, "%s/%s", HTTPD_ROOT, path);
 
+    printf("Try to open file: %s\r\n", fullpath);   /* Debug thinkhy */
     mt = mimetype_file_new(env, fullpath);
     pfree(fullpath);
 

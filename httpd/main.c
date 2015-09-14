@@ -16,13 +16,77 @@ int main(int argc, char **argv)
     struct http_server *server;
 
     env = palloc_init("httpd root context");
-    server = http_server_new(env, PORT);
+    /* server = create_http_server(env, PORT); */
+    server = create_http_server(env, PORT); 
     if (server == NULL)
     {
 	perror("Unable to open HTTP server");
 	return 1;
     }
 
+    while (true)
+    {
+        struct http_session *session;
+        session = server->wait_for_client(server);
+        if (session == NULL)
+        {
+	    perror("server->wait_for_client() returned NULL...");
+	    pfree(server);
+	    return 1;
+        }
+
+        printf("Get a session\n");
+
+	const char *line = session->gets(session); 
+        if (line == NULL)
+	{
+	    fprintf(stderr, "Client connected, but no lines could be read\n");
+	    goto cleanup;
+	}
+        printf("Receive a line: %s\n", line);
+
+	char *method = palloc_array(session, char, strlen(line));
+	char *file = palloc_array(session, char, strlen(line));
+	char *version = palloc_array(session, char, strlen(line));
+	if (sscanf(line, "%s %s %s", method, file, version) != 3)
+	{
+	    fprintf(stderr, "Improper HTTP request\n");
+	    goto cleanup;
+	}
+
+	fprintf(stderr, "[%04lu] < '%s' '%s' '%s'\n", strlen(line),
+		method, file, version);
+
+	while ((line = session->gets(session)) != NULL)
+	{
+	    size_t len;
+
+	    len = strlen(line);
+	    fprintf(stderr, "[%04lu] < %s\n", len, line);
+	    pfree(line);
+
+	    if (len == 0)
+		break;
+	}
+
+	int mterr;
+	struct mimetype *mt = mimetype_new(session, file);
+	if (strcasecmp(method, "GET") == 0)
+	    mterr = mt->http_get(mt, session);
+	else
+	{
+	    fprintf(stderr, "Unknown method: '%s'\n", method);
+	    goto cleanup;
+	}
+
+	if (mterr != 0) {
+	      fprintf(stderr, "unrecoverable error while processing a client");
+	}
+
+        pfree(session);
+    }
+    
+    /*
     while (true)
     {
 	struct http_session *session;
@@ -39,8 +103,9 @@ int main(int argc, char **argv)
 	    return 1;
 	}
 
-	line = session->gets(session);
-	if (line == NULL)
+        
+
+	line = session->gets(session); if (line == NULL)
 	{
 	    fprintf(stderr, "Client connected, but no lines could be read\n");
 	    goto cleanup;
@@ -57,8 +122,10 @@ int main(int argc, char **argv)
 
 	fprintf(stderr, "[%04lu] < '%s' '%s' '%s'\n", strlen(line),
 		method, file, version);
+        */
 
 	/* Skip the remainder of the lines */
+        /*
 	while ((line = session->gets(session)) != NULL)
 	{
 	    size_t len;
@@ -80,13 +147,16 @@ int main(int argc, char **argv)
 	    goto cleanup;
 	}
 
-    if (mterr != 0) {
-      fprintf(stderr, "unrecoverable error while processing a client");
-    }
+	if (mterr != 0) {
+	      fprintf(stderr, "unrecoverable error while processing a client");
+	}
+        */
 
-    cleanup:
-	pfree(session);
-    }
+
+    /* }*/
+
+    cleanup: 
+    pfree(server);
 
     return 0;
 }

@@ -3,7 +3,7 @@
 #define _POSIX_C_SOURCE 1
 #define _BSD_SOURCE
 
-#define MAX_PENDING_CONNECTIONS 8
+#define MAX_PENDING_CONNECTIONS 1
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -23,6 +24,7 @@
 #include <sys/epoll.h>
 
 #include "http.h"
+#include "mimetype.h"
 #include "lambda.h"
 #include "palloc.h"
 
@@ -35,11 +37,13 @@ struct string
     char *data;
 };
 
+static pthread_mutex_t mutex_serv;
+
 static int make_socket_non_blocking (int sfd);  /* Added by thinkhy, 151001 */
 static int create_and_bind (short port);        /* Added by thinkhy, 151001 */
 
 static int listen_on_port(short port);
-static struct http_session *wait_for_client(struct http_server *serv);
+static int wait_for_client(struct http_server *serv);
 
 static int close_session(struct http_session *s);
 static int close_server(struct http_server *hs); /* Added by thinkhy, 151001 */
@@ -48,6 +52,7 @@ static const char *http_gets(struct http_session *s);
 static ssize_t http_puts(struct http_session *s, const char *m);
 static ssize_t http_write(struct http_session *s, const char *m, size_t l);
 
+static int handle_session(struct http_session *s); /* Added by thinkhy, 151004 */
 
 /* Added by thinkhy, 151001 */
 int make_socket_non_blocking (int sfd)
@@ -79,6 +84,7 @@ int create_and_bind (short port)
   struct addrinfo *result, *rp;
   int s, sfd;
   char str_port[10];
+  int so_true;
 
   memset (&hints, 0, sizeof (struct addrinfo));
   hints.ai_family = AF_UNSPEC;     /* Return IPv4 and IPv6 choices */
@@ -99,7 +105,16 @@ int create_and_bind (short port)
       sfd = socket (rp->ai_family, rp->ai_socktype, rp->ai_protocol);
       if (sfd == -1)
         continue;
-
+       
+      /* SO_REUSEADDR allows a socket to bind to a port while there
+       * are still outstanding TCP connections there.  This is
+       * extremely common when debugging a server, so we're going to
+       * use it.  Note that this option shouldn't be used in
+       * production, it has some security implications.  It's OK if
+       * this fails, we'll just sometimes get more errors about the
+       * socket being in use. */
+      setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &so_true, sizeof(so_true));
+       
       s = bind (sfd, rp->ai_addr, rp->ai_addrlen);
       if (s == 0)
         {
@@ -110,13 +125,13 @@ int create_and_bind (short port)
       close (sfd);
     }
 
+  freeaddrinfo (result);
+
   if (rp == NULL)
     {
       fprintf (stderr, "Could not bind\n");
       return -1;
     }
-
-  freeaddrinfo (result);
 
   return sfd;
 }
@@ -128,7 +143,9 @@ struct http_server *create_http_server(palloc_env env, short port)
     int fd, efd, ret;
     struct epoll_event event;
 
+    pthread_mutex_lock(&mutex_serv);
     hs = palloc(env, struct http_server);
+    pthread_mutex_unlock(&mutex_serv);
     if (hs == NULL)
 	return NULL;
 
@@ -229,46 +246,97 @@ int listen_on_port(short port)
     return fd;
 }
 
-/* Modified by thinkhy, 151001 */
-struct http_session *wait_for_client(struct http_server *serv)
+int handle_session(struct http_session *session) 
 {
-    struct http_session *sess;
+    int ret = 0;
+    const char *line = session->gets(session); 
+    if (line == NULL)
+    {
+        fprintf(stderr, "Client connected, but no lines could be read\n");
+        return -1;
+    }
+    printf("Receive a line: %s\n", line);
+    
+    char *method = palloc_array(session, char, strlen(line));
+    char *file = palloc_array(session, char, strlen(line));
+    char *version = palloc_array(session, char, strlen(line));
+    if (sscanf(line, "%s %s %s", method, file, version) != 3)
+    {
+        fprintf(stderr, "Improper HTTP request\n");
+        ret = -1;
+        goto cleanup;
+    }
+    
+    fprintf(stderr, "[%04lu] < '%s' '%s' '%s'\n", strlen(line),
+    	method, file, version);
+    
+    while ((line = session->gets(session)) != NULL)
+    {
+        size_t len;
+    		
+        len = strlen(line);
+        fprintf(stderr, "[%04lu] < %s\n", len, line);
+        pfree(line);
+    
+        if (len == 0)
+    	break;
+    }
+    
+    int mterr = 0;
+    struct mimetype *mt = mimetype_new(session, file);
+    if (strcasecmp(method, "GET") == 0)
+        mterr = mt->http_get(mt, session);
+    else
+    {
+        fprintf(stderr, "Unknown method: '%s'\n", method);
+        ret = -1;
+        goto cleanup;
+    }
+    
+    if (mterr != 0) 
+    {
+        fprintf(stderr, "Unrecoverable error while processing a client");
+        ret = -1;
+        goto cleanup;
+    }
+
+    cleanup:
+    pfree(method);
+    pfree(file);
+    pfree(version); 
+   
+    return ret;
+}
+
+/* Modified by thinkhy, 151001 */
+int wait_for_client(struct http_server *serv)
+{
     /* Astruct sockaddr_in addr; */
     /* socklen_t addr_len; */
-    int ret;
- 
-    sess = palloc(serv, struct http_session);
-    if (sess == NULL)
-	return NULL;
-
-    sess->gets = &http_gets;
-    sess->puts = &http_puts;
-    sess->write = &http_write;
-
-    sess->buf = palloc_array(sess, char, DEFAULT_BUFFER_SIZE);
-    memset(sess->buf, '\0', DEFAULT_BUFFER_SIZE);
-    sess->buf_size = DEFAULT_BUFFER_SIZE;
-    sess->buf_used = 0;
+    int ret = 1;
 
     /* Buffer where events are returned */
     struct epoll_event event;
-    struct epoll_event *events = calloc (MAXEVENTS, sizeof event);
+    struct epoll_event *events = palloc_array (serv, struct epoll_event, MAXEVENTS);
 
     int done = 0;
     /* The event loop */
     while (!done) 
     {
+
       int n, i;
       n = epoll_wait(serv->efd, events, MAXEVENTS, -1);
       for ( i = 0; i < n; i++)
       {
+         printf("==== FD %d active now =====\n", events[i].data.fd);
+
          if ( (events[i].events & EPOLLERR) ||
               (events[i].events & EPOLLHUP) ||
               (!(events[i].events & EPOLLIN)) 
             )
          {
-            /* An error has occurred on this fd, or the socket is not ready 
-             * for reading (why were notified then?)                         */        
+           /* An error has occurred on this fd, or the socket is not ready 
+            * for reading (why were notified then?)                         */        
            perror("epoll error\n");
            close (events[i].data.fd);
            continue;
@@ -318,7 +386,7 @@ struct http_session *wait_for_client(struct http_server *serv)
                 abort();
             
              event.data.fd = infd;
-             event.events = EPOLLIN | EPOLLET;
+             event.events = EPOLLIN | EPOLLET; 
 	     ret = epoll_ctl(serv->efd, EPOLL_CTL_ADD, infd, &event);
              if (ret == -1) 
              {
@@ -330,20 +398,43 @@ struct http_session *wait_for_client(struct http_server *serv)
          } /* Have incoming connections */
          else 
          { 
+            struct http_session *sess;
+            pthread_mutex_lock(&mutex_serv);
+            sess = palloc(serv, struct http_session);
+            pthread_mutex_unlock(&mutex_serv);
+            if (sess == NULL)
+                return -1;
+
+            sess->gets = &http_gets;
+            sess->puts = &http_puts;
+            sess->write = &http_write;
+
+            sess->buf = palloc_array(sess, char, DEFAULT_BUFFER_SIZE);
+            if (sess->buf == NULL)
+               goto cleanup;
+
+            palloc_destructor(sess, &close_session);
+
+            /* Initialize buffer for session */
+            memset(sess->buf, '\0', DEFAULT_BUFFER_SIZE);
+            sess->buf_size = DEFAULT_BUFFER_SIZE;
+            sess->buf_used = 0;
+
             /* Have data on the fd waiting to be read */
 	    printf("Have data on the fd waiting to be read\n");
             sess->fd = events[i].data.fd;
-            done = 1;
-            break; /* main to handle request from web client */
-         } 
-      } /* for loop after epoll_wait */
 
+            handle_session(sess);
+
+            pfree(sess);
+         } 
+      } /* iterate each active event */
     } /* epoll event loop */
 
-    free (events);
-    palloc_destructor(sess, &close_session);
+    cleanup:
+    pfree(events); 
 
-    return sess;
+    return 0;
 }
 
 struct http_session *wait_for_client_old(struct http_server *serv)
@@ -425,6 +516,11 @@ const char *http_gets(struct http_session *s)
 	    return new;
 	}
 
+        /* FIXME: starvation of slow senders is possible. When blindly reading until 
+         * EAGAIN is returned upon receiving a notification, it is possible to indefinitely read
+         * new incoming data from a faster sender while completely starvinga slow sender(as long
+         * as data keeps coming in fast enough, you might not see EAGAIN for quite a while!)
+         *   thinkhy, 151002 */
 	readed = read(s->fd, s->buf + s->buf_used, s->buf_size - s->buf_used);
         if (readed == -1)
         {
@@ -458,16 +554,43 @@ ssize_t http_puts(struct http_session *s, const char *m)
 {
     size_t written;
 
+    int done = 0;
     written = 0;
-    while (written < strlen(m))
+
+    /* Work around SIG_PIPE emitted, thinkhy, 151003 */
+    if (s->fd == -1)
+        return 0;
+
+    while (written < strlen(m) && !done)
     {
 	ssize_t writed;
 
 	writed = write(s->fd, m + written, strlen(m) - written);
-	if (writed < 0)
-	    return -1 * written;
-
-	written += writed;
+        if (writed == -1)
+        {
+            if (errno == EAGAIN
+	         || errno == EWOULDBLOCK)
+            {
+                /* buf is full, try to write next time*/
+                continue;
+            }
+            else
+            {
+                perror("write");
+                done = 1;
+                break;
+            }
+        }
+        else if (writed == 0)
+        {
+            /* return code = 0, socket connection is closed */
+            close(s->fd);
+            s->fd = -1;
+            done = 1;
+            break;
+        }
+	else
+  	    written += writed;
     }
 
     return written;

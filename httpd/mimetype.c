@@ -32,3 +32,4 @@ struct mimetype *mimetype_new(palloc_env env, const char *path)
 
     return mt;
 }
+

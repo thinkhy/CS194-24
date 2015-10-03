@@ -24,8 +24,7 @@ struct http_session
 /* A server that listens for HTTP connections on a given port. */
 struct http_server
 {
-    struct http_session * (*wait_for_client)(struct http_server *);
-
+    int (*wait_for_client)(struct http_server *);
 
     int fd;
     int efd;  /* Descriptor for epoll_wait, added by thinkhy, 151001 */

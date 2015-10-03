@@ -136,7 +136,7 @@ void * _palloc_cast(const void *ptr, const char *type)
 
     blk = PTR_BLK(ptr);
 
-    if (blk->type != type)
+    if (strcmp(blk->type, type))
 	return NULL;
 
     return (void *)ptr;
@@ -211,7 +211,11 @@ int _pfree(const void *ptr, bool external)
 	prev = NULL;
 	cur = blk->parent->children;
 	while (cur != NULL && cur->blk != blk)
+        {
+            /* Added by thinkhy, 151004 */
+            prev = cur;
 	    cur = cur->next;
+        }
 
 	if (cur == NULL)
 	{

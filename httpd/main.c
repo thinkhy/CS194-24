@@ -2,6 +2,8 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include <signal.h>
+#include <pthread.h>
 
 #include "http.h"
 #include "mimetype.h"
@@ -9,14 +11,19 @@
 
 #define PORT 8088
 #define LINE_MAX 1024
+#define MAX_THREADS 16
+
+void *event_loop(void *ptr_env);
 
 int main(int argc, char **argv)
 {
     palloc_env env;
     struct http_server *server;
 
+    signal(SIGPIPE,SIG_IGN);
+    signal(SIGCHLD,SIG_IGN);
+
     env = palloc_init("httpd root context");
-    /* server = create_http_server(env, PORT); */
     server = create_http_server(env, PORT); 
     if (server == NULL)
     {
@@ -24,139 +31,46 @@ int main(int argc, char **argv)
 	return 1;
     }
 
-    while (true)
+    int i, rc;
+    pthread_t threads[MAX_THREADS];
+    for (i = 0; i < MAX_THREADS; i++)
     {
-        struct http_session *session;
-        session = server->wait_for_client(server);
-        if (session == NULL)
+        rc = pthread_create(&threads[i], NULL, event_loop, (void *)server);
+	if (rc != 0) 
+	{
+	    perror("Failed to create new thread");
+	}
+    } 
+
+    for (i = 0; i < MAX_THREADS; i++)
+    {
+        rc = pthread_join(threads[i], NULL);
+        if (rc != 0) 
         {
-	    perror("server->wait_for_client() returned NULL...");
-	    pfree(server);
-	    return 1;
+            perror("Failed to join thread");
         }
-
-        printf("Get a session\n");
-
-	const char *line = session->gets(session); 
-        if (line == NULL)
-	{
-	    fprintf(stderr, "Client connected, but no lines could be read\n");
-	    goto cleanup;
-	}
-        printf("Receive a line: %s\n", line);
-
-	char *method = palloc_array(session, char, strlen(line));
-	char *file = palloc_array(session, char, strlen(line));
-	char *version = palloc_array(session, char, strlen(line));
-	if (sscanf(line, "%s %s %s", method, file, version) != 3)
-	{
-	    fprintf(stderr, "Improper HTTP request\n");
-	    goto cleanup;
-	}
-
-	fprintf(stderr, "[%04lu] < '%s' '%s' '%s'\n", strlen(line),
-		method, file, version);
-
-	while ((line = session->gets(session)) != NULL)
-	{
-	    size_t len;
-
-	    len = strlen(line);
-	    fprintf(stderr, "[%04lu] < %s\n", len, line);
-	    pfree(line);
-
-	    if (len == 0)
-		break;
-	}
-
-	int mterr;
-	struct mimetype *mt = mimetype_new(session, file);
-	if (strcasecmp(method, "GET") == 0)
-	    mterr = mt->http_get(mt, session);
-	else
-	{
-	    fprintf(stderr, "Unknown method: '%s'\n", method);
-	    goto cleanup;
-	}
-
-	if (mterr != 0) {
-	      fprintf(stderr, "unrecoverable error while processing a client");
-	}
-
-        pfree(session);
     }
     
-    /*
-    while (true)
-    {
-	struct http_session *session;
-	const char *line;
-	char *method, *file, *version;
-	struct mimetype *mt;
-	int mterr;
-
-	session = server->wait_for_client(server);
-	if (session == NULL)
-	{
-	    perror("server->wait_for_client() returned NULL...");
-	    pfree(server);
-	    return 1;
-	}
-
-        
-
-	line = session->gets(session); if (line == NULL)
-	{
-	    fprintf(stderr, "Client connected, but no lines could be read\n");
-	    goto cleanup;
-	}
-
-	method = palloc_array(session, char, strlen(line));
-	file = palloc_array(session, char, strlen(line));
-	version = palloc_array(session, char, strlen(line));
-	if (sscanf(line, "%s %s %s", method, file, version) != 3)
-	{
-	    fprintf(stderr, "Improper HTTP request\n");
-	    goto cleanup;
-	}
-
-	fprintf(stderr, "[%04lu] < '%s' '%s' '%s'\n", strlen(line),
-		method, file, version);
-        */
-
-	/* Skip the remainder of the lines */
-        /*
-	while ((line = session->gets(session)) != NULL)
-	{
-	    size_t len;
-
-	    len = strlen(line);
-	    fprintf(stderr, "[%04lu] < %s\n", len, line);
-	    pfree(line);
-
-	    if (len == 0)
-		break;
-	}
-
-	mt = mimetype_new(session, file);
-	if (strcasecmp(method, "GET") == 0)
-	    mterr = mt->http_get(mt, session);
-	else
-	{
-	    fprintf(stderr, "Unknown method: '%s'\n", method);
-	    goto cleanup;
-	}
-
-	if (mterr != 0) {
-	      fprintf(stderr, "unrecoverable error while processing a client");
-	}
-        */
-
-
-    /* }*/
-
-    cleanup: 
-    pfree(server);
-
+    pfree(env);
+    
     return 0;
 }
+
+
+void *event_loop(void *ptr_env)
+{
+    int ret = 0;
+    struct http_server *server = palloc_cast(ptr_env, struct http_server);
+    if (server == NULL)
+        pthread_exit(NULL);
+     
+    ret = server->wait_for_client(server);
+    if (ret != 0)
+    {
+        perror("server->wait_for_client() failed ...");
+    }
+
+    pthread_exit(NULL);
+} /* event_loop */ 
+
+

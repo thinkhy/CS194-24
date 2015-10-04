@@ -344,7 +344,7 @@ int wait_for_client(struct http_server *serv)
          else if (serv->fd == events[i].data.fd)
          {
            /* We have a notification on the listening socket, which means one 
-            * or more incoming connections                                  */
+            * or more incoming client connections                                  */
           while(1) 
           {
              struct sockaddr in_addr;
@@ -386,7 +386,12 @@ int wait_for_client(struct http_server *serv)
                 abort();
             
              event.data.fd = infd;
-             event.events = EPOLLIN | EPOLLET; 
+
+             /* httpd just deals with short connection, which means we receive data     
+              * and send data, then close client data during the process of one event. 
+              * So EPOLLONESHOT is specified, it's the caller's responsibility         
+              * to rearm the file descriptor using epoll_ctl                          */
+             event.events = EPOLLIN | EPOLLET | EPOLLONESHOT; 
 	     ret = epoll_ctl(serv->efd, EPOLL_CTL_ADD, infd, &event);
              if (ret == -1) 
              {
@@ -399,11 +404,16 @@ int wait_for_client(struct http_server *serv)
          else 
          { 
             struct http_session *sess;
+
+            /* allocation of new session is syncronized with mutex 
+             * since serv context is shared by all worker threads */
             pthread_mutex_lock(&mutex_serv);
             sess = palloc(serv, struct http_session);
             pthread_mutex_unlock(&mutex_serv);
             if (sess == NULL)
                 return -1;
+
+            palloc_destructor(sess, &close_session);
 
             sess->gets = &http_gets;
             sess->puts = &http_puts;
@@ -412,8 +422,6 @@ int wait_for_client(struct http_server *serv)
             sess->buf = palloc_array(sess, char, DEFAULT_BUFFER_SIZE);
             if (sess->buf == NULL)
                goto cleanup;
-
-            palloc_destructor(sess, &close_session);
 
             /* Initialize buffer for session */
             memset(sess->buf, '\0', DEFAULT_BUFFER_SIZE);
@@ -426,7 +434,10 @@ int wait_for_client(struct http_server *serv)
 
             handle_session(sess);
 
+            /* syncronize here since deallocation of session will modify parent context serv*/
+            pthread_mutex_lock(&mutex_serv);
             pfree(sess);
+            pthread_mutex_unlock(&mutex_serv);
          } 
       } /* iterate each active event */
     } /* epoll event loop */

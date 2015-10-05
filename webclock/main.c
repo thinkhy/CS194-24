@@ -14,6 +14,7 @@ int main(int argc, char **argv)
     struct tm *tm, *ctm, *rtm;
 
     gettimeofday(&tv, NULL);
+    tv.tv_sec += 3600;       /* Increate 3600 second for adjusting in China */
     memcpy(&ctv, &tv, sizeof(ctv));
     memcpy(&rtv, &tv, sizeof(rtv));
 
@@ -36,9 +37,11 @@ int main(int argc, char **argv)
 	    "HTTP/1.1 200 OK\r\n"
 	    "Content-Type: text/html\r\n"
 	    "Date: %s\r\n"
+	    "Last-Modified: %s\r\n"
 	    "Expires: %s\r\n"
 	    "ETag: \"%lx\"\r\n"
 	    "\r\n",
+	    rt,
 	    rt,
 	    ct,
 	    tv.tv_sec
@@ -60,3 +63,5 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
+

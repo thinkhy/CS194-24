@@ -51,7 +51,9 @@ int http_get(struct mimetype *mt, struct http_session *s)
      */
     struct stat sb;
     int rc = stat(mtf->fullpath, &sb);
-    if (rc == 0 && (sb.st_mode & S_IXUSR)) /* run file and pipe back stdout */
+    if (rc != 0 || !S_ISREG(sb.st_mode))
+       return -1;
+    if (sb.st_mode & S_IXUSR) /* run executable file and pipe back stdout */
     {
        printf("Run CGI program and pipe back stdout to the client\n");
        int pfd[2];  /* pipe file descriptor */

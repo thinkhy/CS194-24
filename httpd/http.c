@@ -4,6 +4,7 @@
 #define _BSD_SOURCE
 
 #define MAX_PENDING_CONNECTIONS 1
+#define MAX_RETRY 5
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -252,7 +253,7 @@ int handle_session(struct http_session *session)
     const char *line = session->gets(session); 
     if (line == NULL)
     {
-        fprintf(stderr, "Client connected, but no lines could be read\n");
+        fprintf(stderr, "Client connected, but no valid lines could be read\n");
         return -1;
     }
     printf("Receive a line: %s\n", line);
@@ -506,6 +507,8 @@ int close_server(struct http_server *hs)
 
 const char *http_gets(struct http_session *s)
 {
+    int retry = 0;
+
     while (true)
     {
 	char *newline;
@@ -531,7 +534,7 @@ const char *http_gets(struct http_session *s)
          * EAGAIN is returned upon receiving a notification, it is possible to indefinitely read
          * new incoming data from a faster sender while completely starvinga slow sender(as long
          * as data keeps coming in fast enough, you might not see EAGAIN for quite a while!)
-         *   thinkhy, 151002 */
+         * thinkhy, 151002 */
 	readed = read(s->fd, s->buf + s->buf_used, s->buf_size - s->buf_used);
         if (readed == -1)
         {
@@ -539,9 +542,19 @@ const char *http_gets(struct http_session *s)
             * So go back to the main loop.                  */
            if (errno == EAGAIN)
            {
-              perror("read return EAGAIN");
+	      if( retry >= MAX_RETRY)
+              {
+                 perror("read return EAGAIN");
+                 break;
+              }
+              else 
+              {
+                 retry++;
+                 continue;
+              }
            }
-           break; 
+           else 
+              break; 
         }
         else if (readed == 0)
         {
@@ -549,7 +562,7 @@ const char *http_gets(struct http_session *s)
            break;
         }
 	else
-	    s->buf_used += readed;
+	   s->buf_used += readed;
 
 	if (s->buf_used >= s->buf_size)
 	{

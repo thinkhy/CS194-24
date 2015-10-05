@@ -1,3 +1,4 @@
+QEMUNAME = "qemu-system-x86"
 # This code abstracts away getting a single line of output from QEMU.
 # There are two important considerations here: that the QEMU instance
 # can be killed asynchronusly by the watchdog timer, and that the
@@ -71,13 +72,15 @@ def kill_qemu()
   
   # First, go ahead and kill the QEMU process we started earlier.
   # Also clean up the pipes that QEMU made
-  Process.kill('INT', @qemu_process.pid)
+  # Process.kill('INT', @qemu_process.pid)  comment out by thinkhy 151008
+  Process.kill('INT', @qemu_process.pid)  
+  system("pkill -9 #{QEMUNAME}");     # Added by thinkhy 151008
 
   # NOTE: it's very important we DON'T cleanup the sockets here, as
   # something else might still need access to them.  I should really
   # figure out Cucumber's pre and post hooks so we can clean things
   # up.
-  #`./boot_qemu --cleanup`
+  # `./boot_qemu --cleanup`
   
   # Killing this thread causes any outstanding read request.  This
   # will result in a test failure, but I can't just do it right now
@@ -129,7 +132,7 @@ def boot_linux(boot_args)
 
   # This ensures that QEMU hasn't terminated without us knowing about
   # it, which would cause the tests to hang on reading.
-  @qemu_watcher = Thread.new{
+  @qemu_watcher = Thread.new {
     puts @qemu_process.readlines
     kill_qemu()
   }
@@ -177,20 +180,21 @@ def boot_linux(boot_args)
   # supplies prints out this message (or kernel panics) otherwise
   # we'll end up just spinning while waiting for an already
   # initialized Linux.
-  init_regex = /^\[cs194-24\] init running/
-  panic_regex = /^\[ *[0-9]*\.[0-9]*\] Kernel panic - not syncing/
-  running = true
-  while (running)
-    next_line()
+  #init_regex = /^\[cs194-24\] init running/
+  #panic_regex = /^\[ *[0-9]*\.[0-9]*\] Kernel panic - not syncing/
+  #running = true
+  #while (running)
+  #  next_line()
+  #  p @line
+  #  if (init_regex.match(@line))
+  #    running = false
+  #  elsif (panic_regex.match(@line))
+  #    STDERR.puts("kernel panic during init: #{@line}")
+  #    running = false
+  #  end
+  #end
 
-    if (init_regex.match(@line))
-      running = false
-    elsif (panic_regex.match(@line))
-      STDERR.puts("kernel panic during init: #{@line}")
-      running = false
-    end
-  end
-
+  sleep(3)
   # Ensure the monitor thread has actually gotten a line from the QEMU
   # monitor -- otherwise we'll be all out of sync later...
   if (@monitor_thread_read == false)
@@ -209,30 +213,32 @@ def run_cmd(cmd)
   # synchronization between the VM and the host, oherwise we'll end up
   # with the serial buffer breaking all the ordering (so, for example,
   # when we want to dump some memory it'll get all lost)
-  STDERR.puts next_line()
+  #STDERR.puts next_line()
 
   #sleep to wait for stuff to run
-  sleep(3)
+  sleep(2)
 end
 
 Given /^Linux is booted with "(.*?)"$/ do |boot_args|
+  p "boot_linux(#{boot_args})"
   boot_linux(boot_args)
 end
 
 Then /^the extra version should be\s*"(.*?)"$/ do |extra_version|
   # We just need to read the output, this special init already prints
   # out the version information
-  line = next_line_noprintk()
-
+  #line = next_line_noprintk()
+  line = next_line()
+  p "Check extra version"
   # We can finally test the actual version here.
-  if !(/Linux \(version\) [0-9]*\.[0-9]*\.[0-9]*#{extra_version}/.match(line))
+  if !(/Linux \(?version\)? [0-9]*\.[0-9]*\.[0-9]*#{extra_version}/.match(line))
     fail
   end
 end
 
 Then /^Linux should shut down cleanly$/ do
   # Look for Linux's power-off message
-  while !(/\[ *[0-9]*\.[0-9]*\] Power down\./.match(next_line()))
+  while !(/\[ *[0-9]*\.[0-9]*\] (Power down|System halted)\./.match(next_line()))
     STDERR.puts(@line)
     # A clean shutdown means that the code can't kernel panic.
     if (/^\[.*\] Kernel panic/.match(@line))
@@ -252,11 +258,22 @@ Then /^Qemu gets killed$/ do
   kill_qemu()
 end
 
-Before do 
-  if !$dunit 
-    # do it
-    boot_linux("")
-    run_cmd("httpd")
-    $dunit = true 
-  end 
-end 
+#Before do 
+#  if !$dunit 
+#    # do it
+#    boot_linux("")
+#    run_cmd("httpd")
+#    $dunit = true 
+#  end 
+#end 
+
+Before('@lab0.0') do |scenario|
+  system("pkill -9 #{QEMUNAME}");     # Added by thinkhy 151008
+end
+
+After('@lab0.0') do |scenario|
+  system("pkill -9 #{QEMUNAME}");     # Added by thinkhy 151008
+  sleep(2)
+  p "#{scenario.name} end"
+end
+

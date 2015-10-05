@@ -14,14 +14,16 @@
 #define MAX_THREADS 16
 
 static void sig_pipe(int);
+static void sig_stop(int);
 static void *event_loop(void *ptr_env);
+static palloc_env env;
 
 int main(int argc, char **argv)
 {
-    palloc_env env;
     struct http_server *server;
 
     signal(SIGPIPE,sig_pipe);
+    signal(SIGSTOP,sig_stop);
     /* signal(SIGCHLD,SIG_IGN);  if SIGCHLD is ignored, waitpid can't capture exit state of child process */
 
     env = palloc_init("httpd root context");
@@ -77,6 +79,11 @@ void *event_loop(void *ptr_env)
 void sig_pipe(int signo) 
 {
   printf("Received SIGPIPE\n"); 
+}
+
+void sig_stop(int signo) 
+{
+    pfree(env);
 }
 
 

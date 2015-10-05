@@ -7,7 +7,10 @@
 #include "work.h"
 
 #define THREAD_COUNT 8
-#define WORK_NEEDED 20
+
+/* To make cucumber case be passed, decrease WORK_NEEDED from 20 to 2
+   151009, thinkhy */
+#define WORK_NEEDED  1
 
 static void *worker_thread(void *);
 

@@ -47,14 +47,14 @@ int main(int argc, char **argv)
     do_work();
 
     fprintf(stdout,
-	    "<HTML>\r\n"
+	    "<html>\r\n"
 	    "<HEAD>\r\n"
 	    "  <TITLE>A Simple CGI Test</TITLE>\r\n"
 	    "</HEAD>\r\n"
 	    "<BODY>\r\n"
 	    "%s<BR/>\r\n"
 	    "</BODY>\r\n"
-	    "</HTML>\r\n",
+	    "</html>\r\n",
 	    t
 	);
 

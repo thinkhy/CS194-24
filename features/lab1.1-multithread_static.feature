@@ -4,10 +4,12 @@ Feature: Multithreaded HTTP Server
   Background:
     Given the root path is "http://localhost:8088"
 
+  @html @single
   Scenario: Get the test page
 		When I visit "/test.html"
 		Then I should see "A test page"
 
+        @html @single
 	Scenario: Get the Lorem page
 		When I visit "/lorem.html"
 		Then I should see "Quisque sit amet congue elit"
@@ -38,32 +40,34 @@ Feature: Multithreaded HTTP Server
 		When I visit "/lorem.html"
 		Then I should see "Quisque sit amet congue elit"
 
+        @cgi @single
 	Scenario: Check CGI
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
 
+        @cgi @multi
 	Scenario: Check multiple CGI requests
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
 
 	Scenario: Check interleaved CGI and static reqeusts
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
 		When I visit "/lorem.html"
 		Then I should see "Quisque sit amet congue elit"
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
 		When I visit "/lorem.html"
 		Then I should see "Quisque sit amet congue elit"
-		When I visit "webclock"
+		When I visit "/webclock"
 		Then I should see "00 +0000"
 		When I visit "/lorem.html"
 		Then I should see "Quisque sit amet congue elit"		

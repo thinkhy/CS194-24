@@ -1,3 +1,5 @@
+QEMUNAME = "qemu-system-x86"
+
 Given /^the root path is "(.*?)"$/ do |url|
   Capybara.app_host = url
 end
@@ -25,5 +27,18 @@ end
 
 Then /^show me the page$/ do
   save_and_open_page
+end
+
+Before('@multi') do |scenario|
+  if (!system("ps -eo comm|grep -i #{QEMUNAME}"))     # Added by thinkhy 151008
+     boot_linux("")
+     run_cmd("httpd")
+  end 
+end
+
+After('@multi') do |scenario|
+  # system("pkill -9 #{QEMUNAME}");     # Added by thinkhy 151008
+  # sleep(2)
+  p "#{scenario.name} end"
 end
 

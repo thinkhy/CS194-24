@@ -21,24 +21,16 @@ Feature: Multithreaded HTTP Server
 		Then I should see "A test page"
 		When I visit "/test.html"
 		Then I should see "A test page"
-		When I visit "/test.html"
-		Then I should see "A test page"
-		When I visit "/test.html"
-		Then I should see "A test page"
 
-	Scenario: Get different pages multiple times
-		When I visit "/test.html"
-		Then I should see "A test page"
-		When I visit "/lorem.html"
-		Then I should see "Quisque sit amet congue elit"
-		When I visit "/test.html"
-		Then I should see "A test page"
-		When I visit "/lorem.html"
-		Then I should see "Quisque sit amet congue elit"
-		When I visit "/test.html"
-		Then I should see "A test page"
-		When I visit "/lorem.html"
-		Then I should see "Quisque sit amet congue elit"
+	Scenario Outline: Get different pages multiple times
+		When I visit "<url>"
+		Then I should see "<content>"
+
+	Examples:
+		| url         | content                      | 
+		| /test.html  | A test page                  | 
+		| /lorem.html | Quisque sit amet congue elit | 
+		| /webclock   | 00 +0000                     |
 
         @cgi @single
 	Scenario: Check CGI

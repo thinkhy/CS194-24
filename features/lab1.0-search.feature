@@ -6,18 +6,18 @@ Feature: Basic browsing functions with Capybara
   webb applications. 
  
   Background:
-    Given the root path is "http://www.google.com"
+    Given the root path is "http://www.bing.com"
 
   Scenario: Check connection
     When I am on the root page
-    Then I should see "Google"
+    Then I should see "Bing"
 
   Scenario: Perform a simple search
     Given I am on the root page
-    And I search for "cs194-24"
-    Then I should see "inst.eecs.berkeley.edu/~cs194-24/sp13/"
+    And I search for "TiD"
+    Then I should see "www.tid.org.cn"
 
   Scenario: Ensure a string is not present
     Given I am on the root page
     And I search for "cats"
-    Then I should not see "berkeley"
+    Then I should not see "test automation"

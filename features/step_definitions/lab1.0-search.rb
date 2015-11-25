@@ -21,8 +21,8 @@ Then /^I should see "(.*?)"$/ do |text|
 end
 
 When /^I search for "(.*?)"$/ do |keyword|
-  fill_in 'gbqfq', :with => keyword
-  click_button 'gbqfba'
+  fill_in 'sb_form_q', :with => keyword
+  click_button 'sb_form_go'
 end
 
 Then /^show me the page$/ do
@@ -30,14 +30,14 @@ Then /^show me the page$/ do
 end
 
 Before('@multi') do |scenario|
-  if (!system("ps -eo comm|grep -i #{QEMUNAME}"))     # Added by thinkhy 151008
+  if (!system("ps -eo comm|grep -i #{QEMUNAME}"))     # Added by huangye 151008
      boot_linux("")
      run_cmd("httpd")
   end 
 end
 
 After('@multi') do |scenario|
-  # system("pkill -9 #{QEMUNAME}");     # Added by thinkhy 151008
+  # system("pkill -9 #{QEMUNAME}");     # Added by huangye 151008
   # sleep(2)
   p "#{scenario.name} end"
 end

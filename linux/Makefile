@@ -1,8 +1,8 @@
 VERSION = 3
 PATCHLEVEL = 7
 SUBLEVEL = 1
-EXTRAVERSION = cs194_thinkhy
-NAME = One Giant Leap for Frogkind
+EXTRAVERSION = TID2016
+NAME = BDD DEMO for TID2016
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
